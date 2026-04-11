@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { 
   Upload, 
   TrendingUp, 
@@ -148,15 +148,35 @@ Tu output debe reflejar la precisión y el rigor de un terminal de trading insti
 
 export default function App() {
   const [image, setImage] = useState<string | null>(null);
+  const [mimeType, setMimeType] = useState<string>("image/png");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const resetAnalysis = () => {
+    setImage(null);
+    setAnalysis(null);
+    setError(null);
+    setCopied(false);
+    setShowResetConfirm(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleButtonClick = () => {
+    if (analysis) {
+      setShowResetConfirm(true);
+    } else {
+      analyzeChart();
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setMimeType(file.type || "image/png");
       const reader = new FileReader();
       reader.onloadend = () => {
         setImage(reader.result as string);
@@ -186,6 +206,10 @@ export default function App() {
     setError(null);
 
     try {
+      if (!process.env.GEMINI_API_KEY) {
+        throw new Error("API_KEY_MISSING: La clave de API de Gemini no está configurada. Si estás en Vercel, asegúrate de añadir GEMINI_API_KEY en las variables de entorno del proyecto.");
+      }
+
       const model = "gemini-3-flash-preview";
       const base64Data = image.split(',')[1];
       
@@ -197,32 +221,43 @@ export default function App() {
               { text: SYSTEM_PROMPT },
               {
                 inlineData: {
-                  mimeType: "image/png",
+                  mimeType: mimeType,
                   data: base64Data
                 }
               },
-              { text: "Analiza este gráfico de XAUUSD y genera el bloque de operaciones siguiendo el formato institucional solicitado." }
+              { text: "Ejecutar modelado cuantitativo inmediato sobre esta telemetría visual." }
             ]
           }
         ],
+        config: {
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
+        }
       });
 
       const text = result.text;
       if (text) {
         setAnalysis(text);
       } else {
-        throw new Error("No se pudo generar el análisis.");
+        throw new Error("No se pudo generar el análisis. La respuesta de la IA está vacía.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Error al analizar el gráfico. Asegúrate de que la imagen sea clara y que la API KEY esté configurada.");
+      const errorMessage = err.message || "Error desconocido al analizar el gráfico.";
+      
+      if (errorMessage.includes("API_KEY_MISSING")) {
+        setError(errorMessage);
+      } else if (errorMessage.includes("API_KEY_INVALID") || errorMessage.includes("API key not found")) {
+        setError("La clave de API proporcionada no es válida. Por favor, verifícala en tu panel de control.");
+      } else {
+        setError(`Error en el análisis: ${errorMessage}. Asegúrate de que la imagen sea clara y que la API KEY esté configurada correctamente en el entorno.`);
+      }
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-brand-lime/20">
+    <div className="min-h-screen text-slate-900 font-sans selection:bg-brand-lime/20">
       {/* Header */}
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-24 flex items-center justify-between">
@@ -286,17 +321,23 @@ export default function App() {
             </div>
 
             <button
-              onClick={analyzeChart}
-              disabled={!image || isAnalyzing}
+              onClick={handleButtonClick}
+              disabled={(!image && !analysis) || isAnalyzing}
               className={`w-full py-5 rounded-2xl font-bold text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 transition-all duration-300
-                ${!image || isAnalyzing 
+                ${(!image && !analysis) || isAnalyzing 
                   ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
-                  : 'bg-slate-900 text-white hover:bg-brand-navy hover:shadow-2xl hover:shadow-brand-lime/20 active:scale-[0.98]'}`}
+                  : analysis 
+                    ? 'bg-brand-navy text-brand-lime border border-brand-lime/30 hover:bg-slate-800'
+                    : 'bg-slate-900 text-white hover:bg-brand-navy hover:shadow-2xl hover:shadow-brand-lime/20 active:scale-[0.98]'}`}
             >
               {isAnalyzing ? (
                 <>
                   <Loader2 className="animate-spin" size={18} />
                   Procesando Algoritmos...
+                </>
+              ) : analysis ? (
+                <>
+                  <Check size={18} /> Modelado Ejecutado
                 </>
               ) : (
                 <>
@@ -440,6 +481,50 @@ export default function App() {
           </p>
         </div>
       </footer>
+      {/* Reset Confirmation Modal */}
+      <AnimatePresence>
+        {showResetConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center px-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowResetConfirm(false)}
+              className="absolute inset-0 bg-brand-navy/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-slate-100"
+            >
+              <div className="w-16 h-16 bg-brand-lime/10 rounded-2xl flex items-center justify-center mb-6">
+                <FileImage className="text-brand-lime" size={32} />
+              </div>
+              <h3 className="text-2xl font-serif italic text-slate-900 mb-3">
+                Nuevo Modelado
+              </h3>
+              <p className="text-slate-500 text-sm leading-relaxed mb-8">
+                ¿Desea descartar el análisis actual e ingresar nueva telemetría visual para un nuevo modelado cuantitativo?
+              </p>
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setShowResetConfirm(false)}
+                  className="flex-1 py-4 rounded-xl font-bold text-[10px] uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={resetAnalysis}
+                  className="flex-1 py-4 bg-brand-navy text-brand-lime rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-brand-navy/10"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
