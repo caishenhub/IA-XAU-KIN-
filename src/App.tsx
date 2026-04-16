@@ -303,6 +303,8 @@ export default function App() {
       
       if (errorMessage.includes("API_KEY_MISSING")) {
         setError(errorMessage);
+      } else if (errorMessage.includes("RESOURCE_EXHAUSTED") || errorMessage.includes("429")) {
+        setError("CRÉDITOS AGOTADOS: Tu saldo de Google AI Studio se ha terminado o has superado el límite de cuota. Por favor, recarga tus créditos en https://aistudio.google.com/app/billing");
       } else if (errorMessage.includes("API_KEY_INVALID") || errorMessage.includes("API key not found")) {
         setError("La clave de API proporcionada no es válida. Por favor, verifícala en tu panel de control.");
       } else {
