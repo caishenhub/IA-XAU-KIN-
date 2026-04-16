@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { 
   Upload, 
@@ -141,6 +141,7 @@ Texto profesional sobre:
 - Prohibido omitir el timestamp de origen del gráfico.
 - Prohibido proyectar fuera de la ventana de 60 minutos.
 - Prioridad absoluta a la tendencia de alta temporalidad para los 10 pips.
+- **RESTRICCIÓN DE EXTENSIÓN:** El reporte completo debe ser altamente denso en información técnica y NO exceder las 500 palabras en total.
 
 ---
 
@@ -155,6 +156,70 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const processFile = useCallback((file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 2048;
+        const MAX_HEIGHT = 2048;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          // Usamos JPEG a 0.85 para el equilibrio perfecto entre peso de archivo y nitidez de velas/texto
+          const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setMimeType("image/jpeg");
+          setImage(optimizedDataUrl);
+          setAnalysis(null);
+          setError(null);
+          setCopied(false);
+        }
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (file) {
+            processFile(file);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [processFile]);
 
   const resetAnalysis = () => {
     setImage(null);
@@ -176,15 +241,7 @@ export default function App() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setMimeType(file.type || "image/png");
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImage(reader.result as string);
-        setAnalysis(null);
-        setError(null);
-        setCopied(false);
-      };
-      reader.readAsDataURL(file);
+      processFile(file);
     }
   };
 
@@ -308,7 +365,8 @@ export default function App() {
                     <Upload className="text-slate-300 group-hover:text-brand-lime" size={32} />
                   </div>
                   <p className="text-sm font-bold text-slate-800">Ingresar Datos Visuales</p>
-                  <p className="text-xs text-slate-400 mt-2">TradingView Telemetry (PNG/JPG)</p>
+                  <p className="text-xs text-slate-400 mt-2">Pegar (Ctrl+V) o Clic para Cargar</p>
+                  <p className="text-[9px] text-slate-300 mt-1 uppercase tracking-widest font-bold">Telemetría (PNG/JPG)</p>
                 </div>
               )}
               <input 
