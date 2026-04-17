@@ -17,36 +17,23 @@ import {
   Loader2,
   ChevronRight,
   Copy,
-  Check
+  Check,
+  LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+import { Login } from './components/Login';
 
 // Initialize Gemini API
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 const Logo = ({ className = "" }: { className?: string }) => (
-  <svg viewBox="0 0 400 140" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Decorative Line Above */}
-    <path d="M20 45 L40 25 H180" stroke="#CCFF00" strokeWidth="3" strokeLinecap="round" />
-    <circle cx="185" cy="25" r="3" fill="#CCFF00" />
-    
-    {/* Main Text */}
-    <text x="35" y="85" fill="#1A1A2E" fontSize="52" fontWeight="800" fontFamily="Inter, sans-serif">IA XAU KIN</text>
-    
-    {/* Circuit Pattern on Right */}
-    <g transform="translate(310, 70)">
-      <path d="M0 -50 A50 50 0 0 1 0 50" stroke="#CCFF00" strokeWidth="1.5" strokeDasharray="3 3" />
-      <path d="M15 -40 A40 40 0 0 1 15 40" stroke="#CCFF00" strokeWidth="2.5" />
-      <circle cx="15" cy="-40" r="2.5" fill="#CCFF00" />
-      <circle cx="15" cy="40" r="2.5" fill="#CCFF00" />
-      <path d="M30 -30 A30 30 0 0 1 30 30" stroke="#CCFF00" strokeWidth="2" />
-      <circle cx="30" cy="-30" r="2" fill="#CCFF00" />
-      <circle cx="30" cy="30" r="2" fill="#CCFF00" />
-      {/* Small connecting lines */}
-      <path d="M15 0 H35" stroke="#CCFF00" strokeWidth="1" />
-      <circle cx="38" cy="0" r="1.5" fill="#CCFF00" />
-    </g>
-  </svg>
+  <img 
+    src="https://i.ibb.co/ZDmC99g/BLANCO-removebg-preview.png" 
+    alt="IA XAU KIN" 
+    className={`${className} hover:scale-105 transition-transform duration-500`}
+    referrerPolicy="no-referrer"
+  />
 );
 
 const SYSTEM_PROMPT = `Actúa como IA XAU KIN, un Analista Cuantitativo Senior y Estratega Institucional especializado en el mercado XAUUSD. Tu enfoque es puramente basado en datos, modelado de estructura de mercado de alta precisión y gestión de riesgos algorítmica.
@@ -141,6 +128,7 @@ Texto profesional sobre:
 - Prohibido omitir el timestamp de origen del gráfico.
 - Prohibido proyectar fuera de la ventana de 60 minutos.
 - Prioridad absoluta a la tendencia de alta temporalidad para los 10 pips.
+- **FORMATO HORARIO:** Debes utilizar EXCLUSIVAMENTE el formato de 12 horas (AM/PM). Queda terminantemente prohibido el uso de formato de 24 horas (ej: prohibido 14:00, usar 02:00 PM).
 - **RESTRICCIÓN DE EXTENSIÓN:** El reporte completo debe ser altamente denso en información técnica y NO exceder las 500 palabras en total.
 
 ---
@@ -148,9 +136,11 @@ Texto profesional sobre:
 Tu output debe reflejar la precisión y el rigor de un terminal de trading institucional.`;
 
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [image, setImage] = useState<string | null>(null);
   const [mimeType, setMimeType] = useState<string>("image/png");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -245,6 +235,25 @@ export default function App() {
     }
   };
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
   const handleCopy = async () => {
     if (!analysis) return;
     try {
@@ -315,13 +324,27 @@ export default function App() {
     }
   };
 
+  if (!isLoggedIn) {
+    return <Login onLogin={() => setIsLoggedIn(true)} />;
+  }
+
   return (
-    <div className="min-h-screen text-slate-900 font-sans selection:bg-brand-lime/20">
+    <div className="min-h-screen text-slate-900 font-sans selection:bg-brand-lime/20 relative">
+      {/* Dynamic Background Pattern */}
+      <div 
+        className="fixed inset-0 pointer-events-none opacity-[0.02] grayscale invert"
+        style={{
+          backgroundImage: 'url("https://storage.googleapis.com/test-media-human-eval/temp/ais/63a1441b-a910-438d-80bb-698f24b216ce.png")',
+          backgroundSize: '800px',
+          backgroundRepeat: 'repeat',
+          zIndex: -1
+        }}
+      />
       {/* Header */}
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-24 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 h-32 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Logo className="h-16 w-auto" />
+            <Logo className="h-32 w-auto" />
           </div>
           <div className="hidden md:flex items-center gap-8 text-xs font-bold uppercase tracking-widest text-slate-500">
             <span className="flex items-center gap-2 hover:text-brand-navy transition-colors cursor-pointer group">
@@ -330,6 +353,12 @@ export default function App() {
             <span className="flex items-center gap-2 hover:text-brand-navy transition-colors cursor-pointer group">
               <ShieldCheck size={14} className="group-hover:text-brand-lime transition-colors" /> Smart Money
             </span>
+            <button 
+              onClick={() => setIsLoggedIn(false)}
+              className="flex items-center gap-2 text-red-500 hover:text-red-700 transition-colors cursor-pointer group ml-4"
+            >
+              <LogOut size={14} /> Salir
+            </button>
           </div>
         </div>
       </header>
@@ -351,9 +380,36 @@ export default function App() {
 
             <div 
               onClick={() => fileInputRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
               className={`relative group cursor-pointer rounded-3xl border-2 border-dashed transition-all duration-500 overflow-hidden aspect-[4/3] flex items-center justify-center
-                ${image ? 'border-brand-lime/30 bg-white' : 'border-slate-200 hover:border-brand-lime/50 bg-white hover:bg-slate-50'}`}
+                ${image 
+                  ? 'border-brand-lime/30 bg-white' 
+                  : isDragging
+                    ? 'border-brand-lime bg-slate-50 scale-[1.02] shadow-2xl shadow-brand-lime/10'
+                    : 'border-slate-200 hover:border-brand-lime/50 bg-white hover:bg-slate-50'}`}
             >
+              <AnimatePresence>
+                {isDragging && !image && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 bg-white z-10 flex flex-col items-center justify-center border-4 border-brand-lime pointer-events-none"
+                  >
+                    <motion.div
+                      animate={{ y: [0, -10, 0] }}
+                      transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      <Upload className="text-brand-lime mb-4" size={56} />
+                    </motion.div>
+                    <p className="text-brand-navy font-black uppercase tracking-[0.2em] text-sm italic">Soltar para Escaneo</p>
+                    <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-widest">Protocolo Cuantitativo XAU KIN</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {image ? (
                 <img 
                   src={image} 
@@ -362,7 +418,7 @@ export default function App() {
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="text-center p-10">
+                <div className={`text-center p-10 transition-opacity duration-300 ${isDragging ? 'opacity-0' : 'opacity-100'}`}>
                   <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-500 shadow-sm">
                     <Upload className="text-slate-300 group-hover:text-brand-lime" size={32} />
                   </div>
